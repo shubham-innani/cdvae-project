@@ -157,31 +157,60 @@ export default function Visualize() {
     const [searchParams] = useSearchParams();
     const [files, setFiles] = useState([]);
     const [selectedFile, setSelectedFile] = useState('');
-    const [cifContent, setCifContent] = useState('');
     const [parsed, setParsed] = useState(null);
     const [autoRotate, setAutoRotate] = useState(true);
     const [showBonds, setShowBonds] = useState(true);
+    const [loadingFiles, setLoadingFiles] = useState(true);
+    const [loadingCif, setLoadingCif] = useState(false);
+    const [error, setError] = useState('');
     const BOND_THRESHOLD = 3.5;
 
     useEffect(() => {
-        api.getFiles().then((res) => {
-            setFiles(res.files || []);
-            const fileParam = searchParams.get('file');
-            if (fileParam && res.files?.includes(fileParam)) {
-                setSelectedFile(fileParam);
-            }
-        }).catch(() => { });
-    }, []);
+        let mounted = true;
+        api.getFiles()
+            .then((res) => {
+                if (!mounted) return;
+                const list = res.files || [];
+                setFiles(list);
+                const fileParam = searchParams.get('file');
+                if (fileParam && list.includes(fileParam)) {
+                    setSelectedFile(fileParam);
+                }
+            })
+            .catch((e) => {
+                if (!mounted) return;
+                setError(e?.message || 'Failed to load files');
+            })
+            .finally(() => {
+                if (!mounted) return;
+                setLoadingFiles(false);
+            });
+        return () => { mounted = false; };
+    }, [searchParams]);
 
     useEffect(() => {
         if (!selectedFile) return;
-        fetch(`/api/download/${selectedFile}`)
-            .then((r) => r.text())
+        let mounted = true;
+        queueMicrotask(() => {
+            if (!mounted) return;
+            setLoadingCif(true);
+            setError('');
+            setParsed(null);
+        });
+        api.getCifText(selectedFile)
             .then((text) => {
-                setCifContent(text);
+                if (!mounted) return;
                 setParsed(parseCIF(text));
             })
-            .catch(() => { });
+            .catch((e) => {
+                if (!mounted) return;
+                setError(e?.message || 'Failed to load CIF');
+            })
+            .finally(() => {
+                if (!mounted) return;
+                setLoadingCif(false);
+            });
+        return () => { mounted = false; };
     }, [selectedFile]);
 
     // compute bonds
@@ -222,13 +251,20 @@ export default function Visualize() {
                             className="input-field"
                             value={selectedFile}
                             onChange={(e) => setSelectedFile(e.target.value)}
+                            disabled={loadingFiles}
                         >
-                            <option value="">— Select a file —</option>
+                            <option value="">{loadingFiles ? 'Loading files…' : '— Select a file —'}</option>
                             {files.map((f) => (
                                 <option key={f} value={f}>{f}</option>
                             ))}
                         </select>
                     </div>
+
+                    {error && (
+                        <div className="p-3 rounded-lg bg-accent-rose/10 border border-accent-rose/20 text-accent-rose text-sm">
+                            {error}
+                        </div>
+                    )}
 
                     {parsed && (
                         <>
@@ -276,10 +312,17 @@ export default function Visualize() {
                             <button
                                 className="btn-glow btn-success w-full text-sm"
                                 onClick={() => api.downloadFile(selectedFile)}
+                                disabled={!selectedFile || loadingCif}
                             >
-                                Export CIF
+                                {loadingCif ? 'Loading…' : 'Export CIF'}
                             </button>
                         </>
+                    )}
+
+                    {!parsed && !loadingCif && !error && selectedFile && (
+                        <div className="text-xs text-text-muted">
+                            CIF loaded, parsing… (if this persists, the file may not be valid CIF)
+                        </div>
                     )}
                 </div>
 
@@ -312,11 +355,21 @@ export default function Visualize() {
                     ) : (
                         <div className="flex items-center justify-center h-full text-text-muted">
                             <div className="text-center">
+                                {loadingCif ? (
+                                    <>
+                                        <div className="w-12 h-12 border-4 border-accent-blue/30 border-t-accent-blue rounded-full mx-auto mb-4" style={{ animation: 'spin 1s linear infinite' }} />
+                                        <p className="text-lg font-medium mb-1">Loading CIF…</p>
+                                        <p className="text-sm">Fetching and parsing the crystal file</p>
+                                    </>
+                                ) : (
+                                    <>
                                 <svg className="w-16 h-16 mx-auto mb-4 text-text-muted/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                                 </svg>
                                 <p className="text-lg font-medium mb-1">No Crystal Selected</p>
                                 <p className="text-sm">Select a CIF file to render its 3D structure</p>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}

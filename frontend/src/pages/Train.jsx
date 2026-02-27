@@ -18,13 +18,32 @@ export default function Train() {
     const [job, setJob] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [uploadedDatasets, setUploadedDatasets] = useState([]);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState('');
+    const [uploadOk, setUploadOk] = useState('');
     const pollRef = useRef(null);
     const logEndRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const [isDragOver, setDragOver] = useState(false);
 
     // Scroll log viewer to bottom
     useEffect(() => {
         if (logEndRef.current) logEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }, [job?.logs]);
+
+    // Load uploaded datasets list
+    useEffect(() => {
+        const load = async () => {
+            try {
+                const res = await api.listDatasets();
+                setUploadedDatasets(res.datasets || []);
+            } catch {
+                setUploadedDatasets([]);
+            }
+        };
+        load();
+    }, []);
 
     // Poll job status
     useEffect(() => {
@@ -47,6 +66,36 @@ export default function Train() {
 
     const handleChange = (key, value) => {
         setForm((prev) => ({ ...prev, [key]: value }));
+    };
+
+    const refreshDatasets = async () => {
+        const res = await api.listDatasets();
+        setUploadedDatasets(res.datasets || []);
+    };
+
+    const uploadFile = async (file) => {
+        if (!file) return;
+        setUploadError('');
+        setUploadOk('');
+        setUploading(true);
+        try {
+            const res = await api.uploadDataset(file);
+            await refreshDatasets();
+            setUploadOk(`Uploaded: ${res.filename}`);
+            handleChange('dataset', res.filename);
+        } catch (e) {
+            setUploadError(e?.message || 'Upload failed');
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    const onDrop = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setDragOver(false);
+        const file = e.dataTransfer?.files?.[0];
+        await uploadFile(file);
     };
 
     const startTraining = async () => {
@@ -87,6 +136,58 @@ export default function Train() {
                 <div className="lg:col-span-2 glass-card p-6 animate-fade-in-up">
                     <h2 className="text-lg font-semibold text-text-primary mb-5">Training Configuration</h2>
 
+                    {/* Dataset Upload */}
+                    <div
+                        className={`mb-5 rounded-xl border border-border-glass bg-bg-secondary/50 p-4 transition-colors ${isDragOver ? 'border-accent-blue/60 bg-accent-blue/10' : ''}`}
+                        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                        onDragLeave={() => setDragOver(false)}
+                        onDrop={onDrop}
+                    >
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-accent-blue/15 flex items-center justify-center text-accent-blue shrink-0">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M8 12l4-4m0 0l4 4m-4-4v12" />
+                                </svg>
+                            </div>
+                            <div className="flex-1">
+                                <p className="text-sm font-semibold text-text-primary">Upload dataset (CSV)</p>
+                                <p className="text-xs text-text-muted mt-1">
+                                    Drag & drop a file here, or click browse. It will be stored on the backend and appear in the dataset list.
+                                </p>
+                                <div className="mt-3 flex items-center gap-3">
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".csv"
+                                        className="hidden"
+                                        onChange={(e) => uploadFile(e.target.files?.[0])}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="btn-glow text-sm px-4 py-2"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={uploading || isRunning}
+                                    >
+                                        {uploading ? 'Uploading…' : 'Browse file'}
+                                    </button>
+                                    <span className="text-xs text-text-muted">
+                                        {uploadedDatasets.length ? `${uploadedDatasets.length} uploaded` : 'No uploads yet'}
+                                    </span>
+                                </div>
+                                {uploadOk && (
+                                    <div className="mt-3 text-xs text-accent-emerald">
+                                        {uploadOk}
+                                    </div>
+                                )}
+                                {uploadError && (
+                                    <div className="mt-3 text-xs text-accent-rose">
+                                        {uploadError}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="space-y-5">
                         <div>
                             <label className="block text-sm text-text-secondary mb-2">Dataset</label>
@@ -96,9 +197,20 @@ export default function Train() {
                                 onChange={(e) => handleChange('dataset', e.target.value)}
                                 disabled={isRunning}
                             >
-                                {DATASETS.map((d) => (
-                                    <option key={d.value} value={d.value}>{d.label}</option>
-                                ))}
+                                <optgroup label="Built-in">
+                                    {DATASETS.map((d) => (
+                                        <option key={d.value} value={d.value}>{d.label}</option>
+                                    ))}
+                                </optgroup>
+                                <optgroup label="Uploaded">
+                                    {uploadedDatasets.length === 0 ? (
+                                        <option value="" disabled>No uploaded datasets</option>
+                                    ) : (
+                                        uploadedDatasets.map((name) => (
+                                            <option key={name} value={name}>{name}</option>
+                                        ))
+                                    )}
+                                </optgroup>
                             </select>
                         </div>
 

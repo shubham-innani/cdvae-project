@@ -100,7 +100,11 @@ class JobManager:
             job.logs.append(f"[INFO] Training started on dataset '{job.dataset}'")
             job.logs.append(f"[INFO] Config: epochs={job.epochs}, batch_size={job.batch_size}, lr={job.learning_rate}")
 
-            for epoch, loss in self.trainer.train_epochs(
+            trainer = self.trainer
+            if isinstance(job.dataset, str) and job.dataset.lower().endswith(".csv"):
+                trainer = EnergyTrainer(dataset_path=os.path.join("datasets", job.dataset))
+
+            for epoch, loss in trainer.train_epochs(
                 epochs=job.epochs,
                 batch_size=job.batch_size,
                 learning_rate=job.learning_rate,

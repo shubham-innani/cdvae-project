@@ -20,6 +20,19 @@ async function request(method, path, body = null) {
 }
 
 export const api = {
+    // Datasets
+    listDatasets: () => request('GET', '/datasets'),
+    uploadDataset: async (file) => {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch(`${BASE}/upload`, { method: 'POST', body: fd });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: res.statusText }));
+            throw new Error(err.detail || 'Upload failed');
+        }
+        return res.json();
+    },
+
     // Training
     startTraining: (data) => request('POST', '/train', data),
     stopTraining: (jobId) => request('POST', '/train/stop', { job_id: jobId }),
@@ -37,9 +50,20 @@ export const api = {
     getResults: () => request('GET', '/results'),
     getFiles: () => request('GET', '/files'),
 
+    getCifText: async (filename) => {
+        const safe = encodeURIComponent(filename);
+        const res = await fetch(`${BASE}/download/${safe}`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: res.statusText }));
+            throw new Error(err.detail || 'Failed to load CIF');
+        }
+        return res.text();
+    },
+
     // Download — returns blob URL
     downloadFile: async (filename) => {
-        const res = await fetch(`${BASE}/download/${filename}`);
+        const safe = encodeURIComponent(filename);
+        const res = await fetch(`${BASE}/download/${safe}`);
         if (!res.ok) throw new Error('Download failed');
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);

@@ -154,7 +154,7 @@ export default function Results() {
                                         </div>
                                         <div className="flex gap-2 shrink-0 ml-2">
                                             <Link
-                                                to={`/visualize?file=${file}`}
+                                                to={`/visualize?file=${encodeURIComponent(file)}`}
                                                 className="text-xs text-accent-violet hover:text-accent-rose transition-colors"
                                             >
                                                 View 3D
