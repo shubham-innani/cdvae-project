@@ -69,60 +69,128 @@ export default function Dashboard() {
     }, []);
 
     return (
-        <div className="max-w-6xl mx-auto">
+        <div className="max-w-6xl mx-auto space-y-12">
             {/* Header */}
-            <div className="mb-10 animate-fade-in-up">
-                <h1 className="text-4xl font-extrabold gradient-text mb-2">
-                    CDVAE Dashboard
-                </h1>
-                <p className="text-text-secondary text-lg">
-                    Crystal Diffusion Variational Autoencoder — Research Platform
+            <div className="animate-fade-in-up">
+                <p className="text-sm font-semibold uppercase tracking-[0.2em] text-text-muted mb-3">
+                    Overview
                 </p>
+                <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+                    <div>
+                        <h1 className="text-4xl md:text-5xl font-extrabold gradient-text mb-3">
+                            CDVAE Control Center
+                        </h1>
+                        <p className="text-text-secondary text-base md:text-lg max-w-2xl">
+                            Monitor training, launch new crystal generations, and inspect results from a single, streamlined interface.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <span className="badge badge-running">
+                            <span className="w-2 h-2 rounded-full bg-accent-emerald animate-pulse" />
+                            Backend status
+                        </span>
+                        <span className="text-xs text-text-muted">
+                            Uses `/api` proxy to talk to the server.
+                        </span>
+                    </div>
+                </div>
             </div>
 
-            {/* Stat Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-10 stagger">
-                <StatCard label="Training Runs" value={stats.trainJobs} color="accent-blue" />
-                <StatCard label="Generation Jobs" value={stats.genJobs} color="accent-violet" />
-                <StatCard label="CIF Files" value={stats.cifFiles} color="accent-emerald" />
+            {/* Content */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-10 items-start">
+                {/* Stat Cards */}
+                <div className="xl:col-span-2 space-y-6">
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-text-muted">
+                        Live metrics
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 stagger">
+                        <StatCard label="Training runs" value={stats.trainJobs} color="accent-blue" />
+                        <StatCard label="Generation jobs" value={stats.genJobs} color="accent-violet" />
+                        <StatCard label="CIF files" value={stats.cifFiles} color="accent-emerald" />
+                    </div>
+                </div>
+
+                {/* Quick actions */}
+                <div className="space-y-4">
+                    <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-text-muted">
+                        Quick actions
+                    </h2>
+                    <div className="glass-card p-5 space-y-4">
+                        <p className="text-sm text-text-secondary">
+                            Start with a training run, then generate crystals or jump straight into 3D visualization once you have CIF files.
+                        </p>
+                        <div className="flex flex-wrap gap-3">
+                            <Link to="/train">
+                                <button className="btn-glow btn-success text-sm">
+                                    Start new training
+                                </button>
+                            </Link>
+                            <Link to="/generate">
+                                <button className="btn-glow text-sm">
+                                    Generate crystals
+                                </button>
+                            </Link>
+                            <Link to="/results">
+                                <button className="btn-glow btn-danger text-sm">
+                                    View latest results
+                                </button>
+                            </Link>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {/* Navigation Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 stagger">
-                {cards.map((card) => (
-                    <Link key={card.to} to={card.to} className="group">
-                        <div className="glass-card p-6 flex items-start gap-5 cursor-pointer">
-                            <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${card.gradient} flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform duration-300`}>
-                                {card.icon}
+            <div className="space-y-4">
+                <h2 className="text-sm font-semibold uppercase tracking-[0.2em] text-text-muted">
+                    Workspaces
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 stagger">
+                    {cards.map((card) => (
+                        <Link key={card.to} to={card.to} className="group block h-full">
+                            <div className="glass-card p-8 flex h-full items-center gap-6 cursor-pointer hover:bg-bg-card-hover transition-colors">
+                                <div className={`w-20 h-20 rounded-3xl bg-gradient-to-br ${card.gradient} flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform duration-300 shadow-lg`}>
+                                    {card.icon}
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="text-xl font-bold text-text-primary mb-1 group-hover:text-accent-blue transition-colors">
+                                        {card.title}
+                                    </h3>
+                                    <p className="text-sm text-text-secondary leading-relaxed">
+                                        {card.description}
+                                    </p>
+                                </div>
+                                <div className="w-9 h-9 rounded-full bg-bg-primary/40 flex items-center justify-center group-hover:bg-accent-blue/10 transition-colors">
+                                    <svg className="w-5 h-5 text-text-muted group-hover:text-accent-blue group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                                    </svg>
+                                </div>
                             </div>
-                            <div>
-                                <h3 className="text-lg font-semibold text-text-primary mb-1 group-hover:text-accent-blue transition-colors">
-                                    {card.title}
-                                </h3>
-                                <p className="text-sm text-text-secondary leading-relaxed">
-                                    {card.description}
-                                </p>
-                            </div>
-                            <svg className="w-5 h-5 text-text-muted ml-auto mt-1 group-hover:text-accent-blue group-hover:translate-x-1 transition-all" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                            </svg>
-                        </div>
-                    </Link>
-                ))}
+                        </Link>
+                    ))}
+                </div>
             </div>
         </div>
     );
 }
 
 function StatCard({ label, value, color }) {
+    const colorMap = {
+        'accent-blue': 'bg-accent-blue/15 text-accent-blue',
+        'accent-violet': 'bg-accent-violet/15 text-accent-violet',
+        'accent-emerald': 'bg-accent-emerald/15 text-accent-emerald',
+    };
+
+    const colorClasses = colorMap[color] || colorMap['accent-blue'];
+
     return (
-        <div className="glass-card p-5 flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl bg-${color}/15 flex items-center justify-center text-${color}`}>
-                <span className="text-2xl font-bold">{value}</span>
+        <div className="glass-card p-6 sm:p-7 flex items-center gap-5">
+            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center ${colorClasses}`}>
+                <span className="text-2xl sm:text-3xl font-bold">{value}</span>
             </div>
             <div>
-                <p className="text-sm text-text-secondary">{label}</p>
-                <p className="text-xl font-bold text-text-primary">{value}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-text-muted mb-1">{label}</p>
+                <p className="text-2xl sm:text-3xl font-bold text-text-primary tracking-tight">{value}</p>
             </div>
         </div>
     );
