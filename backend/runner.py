@@ -93,31 +93,37 @@ class JobManager:
 
     async def _simulate_training(self, job: TrainJob):
         """Simulates training epochs with decreasing loss."""
-        job.state = JobState.RUNNING
-        job.logs.append(f"[INFO] Training started on dataset '{job.dataset}'")
-        job.logs.append(f"[INFO] Config: epochs={job.epochs}, batch_size={job.batch_size}, lr={job.learning_rate}")
+        try:
+            job.state = JobState.RUNNING
+            job.logs.append(f"[INFO] Training started on dataset '{job.dataset}'")
+            job.logs.append(f"[INFO] Config: epochs={job.epochs}, batch_size={job.batch_size}, lr={job.learning_rate}")
 
-        initial_loss = 2.5 + random.random()
-        for epoch in range(1, job.epochs + 1):
-            if job.state == JobState.STOPPED:
-                job.logs.append(f"[WARN] Training stopped by user at epoch {epoch}")
-                return
+            initial_loss = 2.5 + random.random()
+            for epoch in range(1, job.epochs + 1):
+                if job.state == JobState.STOPPED:
+                    job.logs.append(f"[WARN] Training stopped by user at epoch {epoch}")
+                    job.completed_at = time.time()
+                    return
 
-            await asyncio.sleep(1.5)  # simulate compute time
+                await asyncio.sleep(1.5)  # simulate compute time
 
-            progress = epoch / job.epochs
-            noise = random.uniform(-0.05, 0.05)
-            loss = initial_loss * math.exp(-2.5 * progress) + noise
-            loss = max(loss, 0.01)
+                progress = epoch / job.epochs
+                noise = random.uniform(-0.05, 0.05)
+                loss = initial_loss * math.exp(-2.5 * progress) + noise
+                loss = max(loss, 0.01)
 
-            job.current_epoch = epoch
-            job.loss = round(loss, 4)
-            job.loss_history.append({"epoch": epoch, "loss": job.loss})
-            job.logs.append(f"[EPOCH {epoch}/{job.epochs}] loss={job.loss:.4f}")
+                job.current_epoch = epoch
+                job.loss = round(loss, 4)
+                job.loss_history.append({"epoch": epoch, "loss": job.loss})
+                job.logs.append(f"[EPOCH {epoch}/{job.epochs}] loss={job.loss:.4f}")
 
-        job.state = JobState.COMPLETED
-        job.completed_at = time.time()
-        job.logs.append("[INFO] Training completed successfully.")
+            job.state = JobState.COMPLETED
+            job.completed_at = time.time()
+            job.logs.append("[INFO] Training completed successfully.")
+        except Exception as e:
+            job.state = JobState.FAILED
+            job.completed_at = time.time()
+            job.logs.append(f"[ERROR] Training failed: {e}")
 
     def stop_training(self, job_id: str) -> bool:
         job = self.train_jobs.get(job_id)
@@ -141,33 +147,50 @@ class JobManager:
 
     async def _simulate_generation(self, job: GenerateJob):
         """Generate crystals using inference model (or demo CIF if no model)."""
-        job.state = JobState.RUNNING
-        job.logs.append(f"[INFO] Generation started: {job.num_samples} samples, temp={job.temperature}")
+        try:
+            job.state = JobState.RUNNING
+            job.logs.append(f"[INFO] Generation started: {job.num_samples} samples, temp={job.temperature}")
 
-        for i in range(1, job.num_samples + 1):
-            await asyncio.sleep(0.3)  # Brief delay between samples
+            for i in range(1, job.num_samples + 1):
+                if job.state == JobState.STOPPED:
+                    job.logs.append(f"[WARN] Generation stopped by user at sample {i}")
+                    job.completed_at = time.time()
+                    return
 
-            filename = f"crystal_{job.id}_{i:03d}.cif"
-            filepath = os.path.join(self.outputs_dir, "cif", filename)
+                await asyncio.sleep(0.3)  # Brief delay between samples
 
-            if self.inference_model:
-                result = self.inference_model.generate_crystal(
-                    composition=f"sample_{i}",
-                    temperature=job.temperature,
-                )
-                cif_content = self.inference_model.to_cif(result, title=f"crystal_{job.id}_{i:03d}")
-            else:
-                cif_content = self._make_demo_cif(i)
+                filename = f"crystal_{job.id}_{i:03d}.cif"
+                filepath = os.path.join(self.outputs_dir, "cif", filename)
 
-            with open(filepath, "w") as f:
-                f.write(cif_content)
+                if self.inference_model:
+                    result = self.inference_model.generate_crystal(
+                        composition=f"sample_{i}",
+                        temperature=job.temperature,
+                    )
+                    cif_content = self.inference_model.to_cif(result, title=f"crystal_{job.id}_{i:03d}")
+                else:
+                    cif_content = self._make_demo_cif(i)
 
-            job.generated_files.append(filename)
-            job.logs.append(f"[GEN {i}/{job.num_samples}] {filename}")
+                with open(filepath, "w") as f:
+                    f.write(cif_content)
 
-        job.state = JobState.COMPLETED
-        job.completed_at = time.time()
-        job.logs.append("[INFO] Generation completed successfully.")
+                job.generated_files.append(filename)
+                job.logs.append(f"[GEN {i}/{job.num_samples}] {filename}")
+
+            job.state = JobState.COMPLETED
+            job.completed_at = time.time()
+            job.logs.append("[INFO] Generation completed successfully.")
+        except Exception as e:
+            job.state = JobState.FAILED
+            job.completed_at = time.time()
+            job.logs.append(f"[ERROR] Generation failed: {e}")
+
+    def stop_generation(self, job_id: str) -> bool:
+        job = self.generate_jobs.get(job_id)
+        if job and job.state == JobState.RUNNING:
+            job.state = JobState.STOPPED
+            return True
+        return False
 
     @staticmethod
     def _make_demo_cif(index: int) -> str:

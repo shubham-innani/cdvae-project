@@ -8,7 +8,7 @@ Model is loaded once at startup, not inside endpoints.
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -20,9 +20,19 @@ from runner import JobManager
 
 app = FastAPI(title="CDVAE UI API", version="1.0.0")
 
+def _parse_allowed_origins() -> list[str]:
+    """
+    Comma-separated list (e.g. "http://localhost:5173,http://127.0.0.1:5173")
+    or "*" (default).
+    """
+    raw = (os.getenv("CDVAE_ALLOWED_ORIGINS") or "*").strip()
+    if raw == "*":
+        return ["*"]
+    return [o.strip() for o in raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_parse_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,9 +41,11 @@ app.add_middleware(
 # Ensure outputs and checkpoints directories exist
 OUTPUTS_DIR = "outputs"
 CHECKPOINTS_DIR = "checkpoints"
+DATASETS_DIR = "datasets"
 Path(OUTPUTS_DIR).mkdir(exist_ok=True)
 Path(CHECKPOINTS_DIR).mkdir(exist_ok=True)
 Path(OUTPUTS_DIR, "cif").mkdir(parents=True, exist_ok=True)
+Path(DATASETS_DIR).mkdir(exist_ok=True)
 
 # Load model once at startup (not inside endpoints)
 CHECKPOINT_PATH = os.path.join(CHECKPOINTS_DIR, "cdvae.ckpt")
@@ -139,11 +151,58 @@ def results():
 def list_files():
     return {"files": manager.list_cif_files()}
 
+@app.post("/upload")
+async def upload_dataset(file: UploadFile = File(...)):
+    """
+    Upload a dataset file to backend storage (datasets/).
+
+    Frontend should send multipart/form-data with key 'file'.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Missing filename")
+
+    safe_name = os.path.basename(file.filename)
+    if safe_name != file.filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    dest = Path(DATASETS_DIR) / safe_name
+    try:
+        content = await file.read()
+        dest.write_bytes(content)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {e}")
+    finally:
+        await file.close()
+
+    return {"filename": safe_name, "bytes": dest.stat().st_size}
+
+
+@app.get("/datasets")
+def list_datasets():
+    """List uploaded dataset files (datasets/)."""
+    try:
+        files = sorted(
+            f.name for f in Path(DATASETS_DIR).iterdir()
+            if f.is_file() and not f.name.startswith(".")
+        )
+    except FileNotFoundError:
+        files = []
+    return {"datasets": files}
+
 
 @app.get("/download/{filename}")
 def download(filename: str):
     """Download generated CIF file from outputs/cif/."""
-    filepath = os.path.join(manager.outputs_dir, "cif", filename)
-    if not os.path.exists(filepath):
+    safe_name = os.path.basename(filename)
+    if safe_name != filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    if not safe_name.endswith(".cif"):
+        raise HTTPException(status_code=400, detail="Only .cif files are supported")
+
+    cif_dir = Path(manager.outputs_dir) / "cif"
+    filepath = (cif_dir / safe_name).resolve()
+    if cif_dir.resolve() not in filepath.parents:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not filepath.exists():
         raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(filepath, filename=filename, media_type="chemical/x-cif")
+    return FileResponse(str(filepath), filename=safe_name, media_type="chemical/x-cif")
