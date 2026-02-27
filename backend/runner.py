@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from typing import Optional
 
+from energy_model import EnergyTrainer
 
 class JobState(str, Enum):
     QUEUED = "queued"
@@ -67,11 +68,12 @@ class GenerateJob:
 # ─── Singleton Manager ────────────────────────────────────────────────
 
 class JobManager:
-    def __init__(self, outputs_dir: str = "outputs", inference_model=None):
+    def __init__(self, outputs_dir: str = "outputs", inference_model=None, trainer: EnergyTrainer | None = None):
         self.train_jobs: dict[str, TrainJob] = {}
         self.generate_jobs: dict[str, GenerateJob] = {}
         self.outputs_dir = outputs_dir
         self.inference_model = inference_model  # CDVAEModel instance for generation
+        self.trainer = trainer or EnergyTrainer()
         os.makedirs(outputs_dir, exist_ok=True)
         os.makedirs(os.path.join(outputs_dir, "cif"), exist_ok=True)
         os.makedirs(os.path.join(outputs_dir, "checkpoints"), exist_ok=True)
@@ -92,28 +94,27 @@ class JobManager:
         return job
 
     async def _simulate_training(self, job: TrainJob):
-        """Simulates training epochs with decreasing loss."""
+        """Run training using EnergyTrainer (real model when available, synthetic otherwise)."""
         try:
             job.state = JobState.RUNNING
             job.logs.append(f"[INFO] Training started on dataset '{job.dataset}'")
             job.logs.append(f"[INFO] Config: epochs={job.epochs}, batch_size={job.batch_size}, lr={job.learning_rate}")
 
-            initial_loss = 2.5 + random.random()
-            for epoch in range(1, job.epochs + 1):
+            for epoch, loss in self.trainer.train_epochs(
+                epochs=job.epochs,
+                batch_size=job.batch_size,
+                learning_rate=job.learning_rate,
+            ):
                 if job.state == JobState.STOPPED:
                     job.logs.append(f"[WARN] Training stopped by user at epoch {epoch}")
                     job.completed_at = time.time()
                     return
 
-                await asyncio.sleep(1.5)  # simulate compute time
-
-                progress = epoch / job.epochs
-                noise = random.uniform(-0.05, 0.05)
-                loss = initial_loss * math.exp(-2.5 * progress) + noise
-                loss = max(loss, 0.01)
+                # Yield control back to event loop (non-blocking feel).
+                await asyncio.sleep(0)
 
                 job.current_epoch = epoch
-                job.loss = round(loss, 4)
+                job.loss = loss
                 job.loss_history.append({"epoch": epoch, "loss": job.loss})
                 job.logs.append(f"[EPOCH {epoch}/{job.epochs}] loss={job.loss:.4f}")
 
